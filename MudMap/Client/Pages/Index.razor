@@ -3,12 +3,14 @@
 @using SkiaSharp.Views.Blazor
 @using BrowserInterop.Extensions
 @using BrowserInterop.Geolocation
+@using System.Diagnostics
 @inject IJSRuntime jsRuntime
 
 <PageTitle>Mud Map</PageTitle>
 
 <h1>Mud Map</h1>
 
+<button @onclick="@OnClick">RefreshLocation</button>
 <h2>Here's a skewed town map</h2>
 <SkiaSharp.Views.Blazor.SKCanvasView @ref="TheCanvas" EnableRenderLoop="true" OnPaintSurface="@OnPaintSurface" style="width: 500px; height: 500px;"></SkiaSharp.Views.Blazor.SKCanvasView>
 <h2>Here's the real world around you</h2>
@@ -87,46 +89,116 @@
             canvas.DrawPoint(CurrentLocation.Point, Me);
 
         }
-        
+
 
         canvas.DrawText(DateTime.Now.ToString("hh:mm:ss.fff"), 5, 10, Label);
         canvas.DrawText($"{Location?.Latitude}, {Location?.Longitude}", 5, 30, Label);
+        canvas.DrawText($"{CurrentLocation?.Point.X}, {CurrentLocation?.Point.Y}", 5, 50, Label);
 
-          
+
 
     }
 
     protected override async Task OnInitializedAsync()
     {
         await  base.OnInitializedAsync();
-        var window = await jsRuntime.Window();
-        var navigator = await window.Navigator();
-        geolocationWrapper = navigator.Geolocation;
+
 
     }
     bool IsBusy;
+
+    public async Task OnClick(MouseEventArgs e)
+    {
+        await GetLocation();
+    }
+
     public async Task GetLocation()
     {
-        
-        var loc = await geolocationWrapper.GetCurrentPosition();
-        Location = loc.Location.Coords;
+        if(geolocationWrapper == null)
+        {
+            Debug.WriteLine($"Getting wrapper");
+            var window = await jsRuntime.Window();
+            var navigator = await window.Navigator();
+            geolocationWrapper = navigator.Geolocation;
+            await Task.Delay(1000);
+        }
+        if(geolocationWrapper == null)
+        {
+            Debug.WriteLine($"wrapper is null");
+            return;
+        }
 
-        var orderedByLat = Places.OrderBy(place => Math.Abs(place.Location.Latitude - Location.Latitude));
-        var orderedByLon = Places.OrderBy(place => Math.Abs(place.Location.Longitude - Location.Longitude));
-        var closestLat = orderedByLat.FirstOrDefault();
-        var closestLon = orderedByLon.FirstOrDefault();
-        //var distanceLat = 
+        var pos = await geolocationWrapper.GetCurrentPosition();
+        if(pos == null)
+        {
+            Debug.WriteLine($"pos is null");
+            return;
+        }
+        var loc = pos.Location.Coords;
 
-       // var distanceXInMetres = 
+        //Old, order by ditance from me
+        //var orderedByLatDistanceFromMe = Places.OrderBy(place => Math.Abs(place.Location.Latitude - Location.Latitude));
+        //var orderedByLonDistanceFromMe = Places.OrderBy(place => Math.Abs(place.Location.Longitude - Location.Longitude));
 
 
-        CurrentLocation = new Place { Point = new SKPoint(closestLat.Point.X, closestLon.Point.Y) };
+        //var closestLat = orderedByLatDistanceFromMe.FirstOrDefault();
+        //var closestLon = orderedByLonDistanceFromMe.FirstOrDefault();
+        //var secondClosestLat = orderedByLatDistanceFromMe.ElementAtOrDefault(1);
+        //var secondClosestLon = orderedByLonDistanceFromMe.ElementAtOrDefault(1);
+
+        ////Distance between two closest known points
+        //var distanceLat = Math.Abs(closestLat.Location.Latitude - secondClosestLat.Location.Latitude);
+        //var distanceX = Math.Abs(closestLat.Point.X - secondClosestLat.Point.X);
+        //var distanceLon = Math.Abs(closestLon.Location.Longitude - secondClosestLon.Location.Longitude);
+        //var distanceY = Math.Abs(closestLon.Point.Y - secondClosestLon.Point.Y);
+
+
+
+        //new order by absolute distances
+        var tempList = Places.Where(x => x.Location != null).ToList();
+        var currentPlace = new Place {Location = loc };
+        tempList.Add(currentPlace);
+        var orderedByLat = tempList.OrderBy(place => place.Location.Latitude).ToList();
+        var orderedByLon = tempList.OrderBy(place => place.Location.Longitude).ToList();
+
+        var myLatIndex = orderedByLat.IndexOf(currentPlace);
+        var myLonIndex = orderedByLon.IndexOf(currentPlace);
+        var latBeforeMe = orderedByLat.ElementAtOrDefault(myLatIndex - 1);
+        var latAfterMe = orderedByLat.ElementAtOrDefault(myLatIndex + 1);
+        var lonBeforeMe = orderedByLat.ElementAtOrDefault(myLonIndex - 1);
+        var lonAfterMe = orderedByLat.ElementAtOrDefault(myLonIndex + 1);
+
+
+        var beforeAndAfterdistanceLat = Math.Abs(latBeforeMe.Location.Latitude - latAfterMe.Location.Latitude);
+        var beforeAndAfterdistanceX = Math.Abs(latBeforeMe.Point.X - latAfterMe.Point.X);
+        var beforeAndAfterdistanceLon = Math.Abs(lonBeforeMe.Location.Longitude - lonAfterMe.Location.Longitude);
+        var beforeAndAfterdistanceY = Math.Abs(lonBeforeMe.Point.Y - lonAfterMe.Point.Y);
+
+        var pixelsPerLatDegree = beforeAndAfterdistanceX / beforeAndAfterdistanceLat;
+        var pixelsPerLonDegree = beforeAndAfterdistanceY / beforeAndAfterdistanceLon;
+
+        var distanceFromMeToPointBeforeLat = currentPlace.Location.Latitude - latBeforeMe.Location.Latitude;
+        var distanceFromMeToPointBeforeLon = currentPlace.Location.Longitude - lonBeforeMe.Location.Longitude;
+
+        var distanceFromMeToPointBeforeX = distanceFromMeToPointBeforeLat / pixelsPerLatDegree;
+        var distanceFromMeToPointBeforeY = distanceFromMeToPointBeforeLon / pixelsPerLonDegree;
+
+        var myX = latBeforeMe.Point.X + distanceFromMeToPointBeforeX;
+        var myY = latBeforeMe.Point.Y + distanceFromMeToPointBeforeY;
+
+        currentPlace.Point = new SKPoint((float)myX, (float)myY);
+
+        Location = loc;
+        CurrentLocation = currentPlace;
+
+        await jsRuntime.InvokeVoidAsync("AddMarker", loc.Latitude, loc.Longitude);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         await base.OnAfterRenderAsync(firstRender);
-            _ = GetLocation();
+        if(firstRender)
+            await GetLocation();
 
     }
 
