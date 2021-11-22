@@ -134,6 +134,9 @@
             Debug.WriteLine($"pos is null");
             return;
         }
+
+        //fake location
+        //var loc = new GeolocationCoordinates { Latitude =-38.0403, Longitude = 145.534545 };
         var loc = pos.Location.Coords;
 
         //Old, order by ditance from me
@@ -158,7 +161,7 @@
         var tempList = Places.Where(x => x.Location != null).ToList();
         var currentPlace = new Place {Location = loc };
         tempList.Add(currentPlace);
-        var orderedByLat = tempList.OrderBy(place => place.Location.Latitude).ToList();
+        var orderedByLat = tempList.OrderByDescending(place => place.Location.Latitude).ToList();
         var orderedByLon = tempList.OrderBy(place => place.Location.Longitude).ToList();
 
         var myLatIndex = orderedByLat.IndexOf(currentPlace);
@@ -174,17 +177,17 @@
         var beforeAndAfterdistanceLon = Math.Abs(lonBeforeMe.Location.Longitude - lonAfterMe.Location.Longitude);
         var beforeAndAfterdistanceY = Math.Abs(lonBeforeMe.Point.Y - lonAfterMe.Point.Y);
 
-        var pixelsPerLatDegree = beforeAndAfterdistanceX / beforeAndAfterdistanceLat;
-        var pixelsPerLonDegree = beforeAndAfterdistanceY / beforeAndAfterdistanceLon;
+        var pixelsPerLatDegree = beforeAndAfterdistanceY / beforeAndAfterdistanceLat;
+        var pixelsPerLonDegree = beforeAndAfterdistanceX / beforeAndAfterdistanceLon;
 
         var distanceFromMeToPointBeforeLat = currentPlace.Location.Latitude - latBeforeMe.Location.Latitude;
         var distanceFromMeToPointBeforeLon = currentPlace.Location.Longitude - lonBeforeMe.Location.Longitude;
 
-        var distanceFromMeToPointBeforeX = distanceFromMeToPointBeforeLat / pixelsPerLatDegree;
-        var distanceFromMeToPointBeforeY = distanceFromMeToPointBeforeLon / pixelsPerLonDegree;
+        var distanceFromMeToPointBeforeX = distanceFromMeToPointBeforeLon * pixelsPerLonDegree;
+        var distanceFromMeToPointBeforeY = distanceFromMeToPointBeforeLat * pixelsPerLatDegree;
 
-        var myX = latBeforeMe.Point.X + distanceFromMeToPointBeforeX;
-        var myY = latBeforeMe.Point.Y + distanceFromMeToPointBeforeY;
+        var myX = lonBeforeMe.Point.X + distanceFromMeToPointBeforeX;
+        var myY = latBeforeMe.Point.Y - distanceFromMeToPointBeforeY;
 
         currentPlace.Point = new SKPoint((float)myX, (float)myY);
 
