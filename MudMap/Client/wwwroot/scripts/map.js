@@ -21,5 +21,5 @@ function AddMarker(lat, lon) {
 }
 
 function ClearMarkers() {
-    console.log("test");
+    console.log("test1");
 }
