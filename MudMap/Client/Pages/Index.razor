@@ -87,15 +87,12 @@
             canvas.DrawPoint(CurrentLocation.Point, Me);
 
         }
+        
 
+        canvas.DrawText(DateTime.Now.ToString("hh:mm:ss.fff"), 5, 10, Label);
+        canvas.DrawText($"{Location?.Latitude}, {Location?.Longitude}", 5, 30, Label);
 
-        if(DateTime.Now.Second % 5 == 0)
-        {
-            canvas.DrawText(DateTime.Now.ToString("hh:mm:ss.fff"), 5, 10, Label);
-            canvas.DrawText($"{Location?.Latitude}, {Location?.Longitude}", 5, 30, Label);
-            
-            _ = GetLocation();
-        }    
+          
 
     }
 
@@ -110,21 +107,27 @@
     bool IsBusy;
     public async Task GetLocation()
     {
-        if (geolocationWrapper == null || IsBusy)
-            return;
-        IsBusy = true;
-        var loc = await geolocationWrapper.GetCurrentPosition(new PositionOptions{EnableHighAccuracy = true});
+        
+        var loc = await geolocationWrapper.GetCurrentPosition();
         Location = loc.Location.Coords;
 
-        var closestLat = Places.OrderBy(place => Math.Abs(place.Location.Latitude - Location.Latitude)).FirstOrDefault();
-        var closestLon = Places.OrderBy(place => Math.Abs(place.Location.Longitude - Location.Longitude)).FirstOrDefault();
+        var orderedByLat = Places.OrderBy(place => Math.Abs(place.Location.Latitude - Location.Latitude));
+        var orderedByLon = Places.OrderBy(place => Math.Abs(place.Location.Longitude - Location.Longitude));
+        var closestLat = orderedByLat.FirstOrDefault();
+        var closestLon = orderedByLon.FirstOrDefault();
+        //var distanceLat = 
+
+       // var distanceXInMetres = 
+
+
         CurrentLocation = new Place { Point = new SKPoint(closestLat.Point.X, closestLon.Point.Y) };
-        IsBusy = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         await base.OnAfterRenderAsync(firstRender);
+            _ = GetLocation();
+
     }
 
     public class Place
