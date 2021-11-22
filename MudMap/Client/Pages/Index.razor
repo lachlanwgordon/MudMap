@@ -1,0 +1,144 @@
+﻿@page "/"
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@using BrowserInterop.Extensions
+@using BrowserInterop.Geolocation
+@inject IJSRuntime jsRuntime
+
+<PageTitle>Mud Map</PageTitle>
+
+<h1>Mud Map</h1>
+
+<h2>Here's a skewed town map</h2>
+<SkiaSharp.Views.Blazor.SKCanvasView @ref="TheCanvas" EnableRenderLoop="true" OnPaintSurface="@OnPaintSurface" style="width: 500px; height: 500px;"></SkiaSharp.Views.Blazor.SKCanvasView>
+<h2>Here's the real world around you</h2>
+<Map></Map>
+
+
+@code
+{
+    WindowNavigatorGeolocation geolocationWrapper;
+    SKCanvasView TheCanvas;
+    List<Place> Places = new List<Place>
+    {
+        new Place {Point = new SKPoint(20, 300 ),Label = "My House", Location = new GeolocationCoordinates{Latitude = -37.781740, Longitude = 144.922566 } },
+        new Place {Point = new SKPoint(450, 450), Label = "Moe", Location = new GeolocationCoordinates{Latitude = -38.21337, Longitude = 146.27487 } },
+        new Place {Point = new SKPoint(200, 10 ),Label = "Geohash", Location = new GeolocationCoordinates{Latitude = -37.781740, Longitude = 144.922566 } },
+        new Place {Point = new SKPoint(180, 280), Label = "Pub", Location = new GeolocationCoordinates{Latitude = -37.782820, Longitude = 144.983997 } },
+        new Place {Point = new SKPoint(100, 350), Label = "Spencer Street", Location = new GeolocationCoordinates{Latitude = -37.81801, Longitude = 144.95258 } },
+        new Place {Point = new SKPoint(100, 270), Label = "Cafe", Location = new GeolocationCoordinates{Latitude = -37.761554, Longitude = 144.960775 } },
+    };
+
+    Place CurrentLocation { get; set; }
+
+    List<Line> Lines = new List<Line>
+    {
+        new Line{ Start = new SKPoint(100,350), End =  new SKPoint(450, 450), Label = "Train Line" },
+        new Line{ Start = new SKPoint(200,10), End =  new SKPoint(100, 270), Label = "Bike Path" },
+        new Line{ Start = new SKPoint(180,280), End =  new SKPoint(100, 270),  },
+        new Line{ Start = new SKPoint(20,300), End =  new SKPoint(100, 270),  },
+        new Line{ Start = new SKPoint(180,280), End =  new SKPoint(100, 350),  },
+    };
+
+    SKPaint Dot = new SKPaint
+    {
+        Color = SKColors.Aqua,
+        StrokeWidth = 7,
+    };
+
+    SKPaint Me = new SKPaint
+    {
+        Color = SKColors.Blue,
+        StrokeWidth = 12,
+    };
+
+    SKPaint LinePaint = new SKPaint
+    {
+        Color = SKColors.MediumVioletRed,
+        StrokeWidth = 3,
+    };
+
+    SKPaint Label = new SKPaint
+    {
+        Color = SKColors.Black,
+        StrokeWidth = 10,
+        TextSize = 15,
+    };
+
+    GeolocationCoordinates Location;
+
+    void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(SKColors.Beige);
+        foreach (var place in Places)
+        {
+            canvas.DrawPoint(place.Point, Dot);
+            canvas.DrawText(place.Label, place.Point, Label);
+        }
+        foreach(var line in Lines)
+        {
+            canvas.DrawLine(line.Start, line.End, LinePaint);
+            canvas.DrawText(line.Label, line.MidPoint, Label);
+        }
+
+        if(CurrentLocation != null)
+        {
+            canvas.DrawPoint(CurrentLocation.Point, Me);
+
+        }
+
+
+        if(DateTime.Now.Second % 5 == 0)
+        {
+            canvas.DrawText(DateTime.Now.ToString("hh:mm:ss.fff"), 5, 10, Label);
+            canvas.DrawText($"{Location?.Latitude}, {Location?.Longitude}", 5, 30, Label);
+            
+            _ = GetLocation();
+        }    
+
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await  base.OnInitializedAsync();
+        var window = await jsRuntime.Window();
+        var navigator = await window.Navigator();
+        geolocationWrapper = navigator.Geolocation;
+
+    }
+    bool IsBusy;
+    public async Task GetLocation()
+    {
+        if (geolocationWrapper == null || IsBusy)
+            return;
+        IsBusy = true;
+        var loc = await geolocationWrapper.GetCurrentPosition(new PositionOptions{EnableHighAccuracy = true});
+        Location = loc.Location.Coords;
+
+        var closestLat = Places.OrderBy(place => Math.Abs(place.Location.Latitude - Location.Latitude)).FirstOrDefault();
+        var closestLon = Places.OrderBy(place => Math.Abs(place.Location.Longitude - Location.Longitude)).FirstOrDefault();
+        CurrentLocation = new Place { Point = new SKPoint(closestLat.Point.X, closestLon.Point.Y) };
+        IsBusy = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    public class Place
+    {
+        public SKPoint Point { get; set; }
+        public string Label { get; set; } = "";
+        public GeolocationCoordinates Location { get; set; } 
+    }
+
+    public class Line
+    {
+        public SKPoint Start { get; set; }
+        public SKPoint End { get; set; }
+        public SKPoint MidPoint => new SKPoint((Start.X + End.X) / 2,(Start.Y + End.Y) / 2);
+        public string Label { get; set; } = "";
+    }
+}
